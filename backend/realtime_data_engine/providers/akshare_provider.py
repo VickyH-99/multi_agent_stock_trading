@@ -4,12 +4,13 @@ AkShare integrates many sources: Eastmoney, Sina, Tencent, Wind, etc.
 It's used for historical data, fundamentals, sector data, and as a robust fallback.
 """
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import List, Optional
-from concurrent.futures import ThreadPoolExecutor
 
 from loguru import logger
 
+from akshare_runtime import run_akshare_in_executor
 from .base import (
     BaseProvider, CapitalFlowData, DataFreshness, MinuteData,
     NorthboundData, ProviderStatus, QuoteData, SectorData
@@ -21,8 +22,21 @@ _executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="akshare")
 
 async def _run_sync(func, *args):
     """Run a synchronous function in a thread pool."""
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(_executor, func, *args)
+    return await run_akshare_in_executor(func, *args, executor=_executor)
+
+
+def _safe_float(value) -> float:
+    try:
+        return float(value) if value is not None else 0.0
+    except Exception:
+        return 0.0
+
+
+def _split_net_flow(value: float) -> tuple[float, float]:
+    amount = _safe_float(value)
+    if amount >= 0:
+        return amount, 0.0
+    return 0.0, abs(amount)
 
 
 class AkShareProvider(BaseProvider):
@@ -200,24 +214,29 @@ class AkShareProvider(BaseProvider):
             if df is None or df.empty:
                 return None
             last = df.iloc[-1]
-
-            def safe_float(val):
-                try:
-                    return float(val) if val is not None else 0.0
-                except Exception:
-                    return 0.0
+            main_net = _safe_float(
+                last.get("主力净流入-净额", last.get("主力净流入", last.get("今日主力净流入", 0)))
+            )
+            super_large_net = _safe_float(last.get("超大单净流入-净额", last.get("超大单净流入", 0)))
+            large_net = _safe_float(last.get("大单净流入-净额", last.get("大单净流入", 0)))
+            medium_net = _safe_float(last.get("中单净流入-净额", last.get("中单净流入", 0)))
+            small_net = _safe_float(last.get("小单净流入-净额", last.get("小单净流入", 0)))
+            super_large_inflow, super_large_outflow = _split_net_flow(super_large_net)
+            large_inflow, large_outflow = _split_net_flow(large_net)
+            medium_inflow, medium_outflow = _split_net_flow(medium_net)
+            small_inflow, small_outflow = _split_net_flow(small_net)
 
             return CapitalFlowData(
                 symbol=symbol,
-                main_net_inflow=safe_float(last.get("主力净流入", last.get("今日主力净流入", 0))),
-                super_large_inflow=safe_float(last.get("超大单净流入", 0)),
-                super_large_outflow=0.0,
-                large_inflow=safe_float(last.get("大单净流入", 0)),
-                large_outflow=0.0,
-                medium_inflow=safe_float(last.get("中单净流入", 0)),
-                medium_outflow=0.0,
-                small_inflow=safe_float(last.get("小单净流入", 0)),
-                small_outflow=0.0,
+                main_net_inflow=main_net,
+                super_large_inflow=super_large_inflow,
+                super_large_outflow=super_large_outflow,
+                large_inflow=large_inflow,
+                large_outflow=large_outflow,
+                medium_inflow=medium_inflow,
+                medium_outflow=medium_outflow,
+                small_inflow=small_inflow,
+                small_outflow=small_outflow,
                 timestamp=datetime.now(),
                 source="akshare",
             )

@@ -15,11 +15,12 @@ interface StockQuoteCardProps {
 export function StockQuoteCard({ quote, loading, isFallback, fallbackMessage }: StockQuoteCardProps) {
   const prevPrice = useRef<number | null>(null);
   const [flashClass, setFlashClass] = useState('');
+  const currentPrice = quote?.price ?? null;
 
   // Flash animation on price update
   useEffect(() => {
-    if (!quote) return;
-    const curr = quote.price;
+    if (currentPrice == null) return;
+    const curr = currentPrice;
     const prev = prevPrice.current;
     if (prev !== null && curr !== prev) {
       const cls = curr > prev ? 'animate-flash-rise' : 'animate-flash-fall';
@@ -29,7 +30,7 @@ export function StockQuoteCard({ quote, loading, isFallback, fallbackMessage }: 
       return () => clearTimeout(timer);
     }
     prevPrice.current = curr;
-  }, [quote?.price]);
+  }, [currentPrice]);
 
   if (loading && !quote) {
     return (

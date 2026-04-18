@@ -1,0 +1,35 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# Python
+.venv/
+venv/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/.turbo/
+*.tsbuildinfo
+
+# Local runtimes and archives
+.tools/
+
+# Env files
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env.local
+!backend/.env.example
+!frontend/.env.example
+
+# Logs
+*.log
+*.err.log
+*.out.log

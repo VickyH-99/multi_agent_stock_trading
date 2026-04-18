@@ -113,6 +113,7 @@ class SinaProvider(BaseProvider):
                     "Referer": "https://finance.sina.com.cn/",
                 },
                 follow_redirects=True,
+                trust_env=False,
             )
         return self._client
 

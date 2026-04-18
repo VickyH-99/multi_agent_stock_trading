@@ -8,6 +8,9 @@ const ReactECharts = dynamic(() => import('echarts-for-react'), { ssr: false });
 interface CandlestickChartProps {
   data: HistoryBar[];
   showMA?: boolean;
+  loading?: boolean;
+  errorMessage?: string | null;
+  periodLabel?: string;
 }
 
 function calcMA(data: number[], period: number): (number | null)[] {
@@ -20,7 +23,13 @@ function calcMA(data: number[], period: number): (number | null)[] {
   return result;
 }
 
-export function CandlestickChart({ data, showMA = true }: CandlestickChartProps) {
+export function CandlestickChart({
+  data,
+  showMA = true,
+  loading = false,
+  errorMessage = null,
+  periodLabel = 'K线',
+}: CandlestickChartProps) {
   const option = useMemo(() => {
     if (!data.length) return null;
 
@@ -31,9 +40,11 @@ export function CandlestickChart({ data, showMA = true }: CandlestickChartProps)
     const ma5 = calcMA(closes, 5);
     const ma10 = calcMA(closes, 10);
     const ma20 = calcMA(closes, 20);
+    const zoomStart = data.length > 180 ? 72 : data.length > 90 ? 45 : 0;
 
     return {
       backgroundColor: 'transparent',
+      animation: false,
       tooltip: {
         trigger: 'axis',
         axisPointer: { type: 'cross' },
@@ -99,7 +110,7 @@ export function CandlestickChart({ data, showMA = true }: CandlestickChartProps)
         },
       ],
       dataZoom: [
-        { type: 'inside', xAxisIndex: [0, 1], start: 50, end: 100 },
+        { type: 'inside', xAxisIndex: [0, 1], start: zoomStart, end: 100 },
         {
           show: true, xAxisIndex: [0, 1], type: 'slider',
           y: '94%', height: 16,
@@ -107,7 +118,7 @@ export function CandlestickChart({ data, showMA = true }: CandlestickChartProps)
           borderColor: '#30363d',
           handleStyle: { color: '#388bfd' },
           textStyle: { color: '#8b949e', fontSize: 9 },
-          start: 50, end: 100,
+          start: zoomStart, end: 100,
         },
       ],
       series: [
@@ -159,10 +170,27 @@ export function CandlestickChart({ data, showMA = true }: CandlestickChartProps)
     };
   }, [data, showMA]);
 
+  if (loading && !data.length) {
+    return (
+      <div className="h-[440px] rounded-lg border border-border/60 bg-dark-bg/30 animate-pulse" />
+    );
+  }
+
+  if (errorMessage) {
+    return (
+      <div className="flex h-[440px] items-center justify-center rounded-lg border border-dashed border-rise/40 bg-rise/5 px-6 text-center">
+        <div>
+          <div className="mb-2 text-sm font-semibold text-rise">{periodLabel}加载失败</div>
+          <div className="text-xs leading-5 text-text-secondary">{errorMessage}</div>
+        </div>
+      </div>
+    );
+  }
+
   if (!option) {
     return (
-      <div className="flex items-center justify-center h-64 text-text-secondary text-sm">
-        暂无历史数据
+      <div className="flex h-[440px] items-center justify-center rounded-lg border border-dashed border-border text-center text-sm text-text-secondary">
+        暂无{periodLabel}数据
       </div>
     );
   }

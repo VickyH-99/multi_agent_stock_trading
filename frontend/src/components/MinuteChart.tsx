@@ -10,16 +10,25 @@ const ReactECharts = dynamic(() => import('echarts-for-react'), { ssr: false });
 interface StockChartProps {
   quote: Quote | null;
   minuteData: MinuteData | null;
+  loading?: boolean;
 }
 
-export function MinuteChart({ quote, minuteData }: StockChartProps) {
+export function MinuteChart({ quote, minuteData, loading = false }: StockChartProps) {
   const option = useMemo(() => {
     if (!minuteData || !minuteData.times.length) return null;
 
     const prevClose = quote?.prev_close ?? minuteData.prices[0];
+    const priceSpan = minuteData.prices.reduce((maxDiff, price) => {
+      return Math.max(maxDiff, Math.abs(price - prevClose));
+    }, 0);
+    const fallbackPadding = prevClose > 0 ? prevClose * 0.003 : 0.1;
+    const axisPadding = Math.max(priceSpan * 1.3, fallbackPadding);
+    const minPrice = Math.max(0, prevClose - axisPadding);
+    const maxPrice = prevClose + axisPadding;
 
     return {
       backgroundColor: 'transparent',
+      animation: false,
       tooltip: {
         trigger: 'axis',
         backgroundColor: '#1c2128',
@@ -44,14 +53,15 @@ export function MinuteChart({ quote, minuteData }: StockChartProps) {
         },
       },
       grid: [
-        { left: 60, right: 10, top: 10, bottom: 60 },
-        { left: 60, right: 10, top: '75%', bottom: 10 },
+        { left: 58, right: 58, top: 10, bottom: 60 },
+        { left: 58, right: 58, top: '75%', bottom: 10 },
       ],
       xAxis: [
         {
           type: 'category',
           data: minuteData.times,
           gridIndex: 0,
+          boundaryGap: false,
           axisLine: { lineStyle: { color: '#30363d' } },
           axisLabel: { color: '#8b949e', fontSize: 10 },
           splitLine: { show: false },
@@ -61,6 +71,7 @@ export function MinuteChart({ quote, minuteData }: StockChartProps) {
           type: 'category',
           data: minuteData.times,
           gridIndex: 1,
+          boundaryGap: false,
           axisLine: { lineStyle: { color: '#30363d' } },
           axisLabel: { show: false },
           axisTick: { show: false },
@@ -71,6 +82,8 @@ export function MinuteChart({ quote, minuteData }: StockChartProps) {
           type: 'value',
           gridIndex: 0,
           scale: true,
+          min: minPrice,
+          max: maxPrice,
           axisLine: { show: false },
           axisTick: { show: false },
           splitLine: { lineStyle: { color: '#21262d', type: 'dashed' } },
@@ -78,6 +91,25 @@ export function MinuteChart({ quote, minuteData }: StockChartProps) {
             color: '#8b949e',
             fontSize: 10,
             formatter: (v: number) => v.toFixed(2),
+          },
+        },
+        {
+          type: 'value',
+          gridIndex: 0,
+          position: 'right',
+          min: minPrice,
+          max: maxPrice,
+          axisLine: { show: false },
+          axisTick: { show: false },
+          splitLine: { show: false },
+          axisLabel: {
+            color: '#8b949e',
+            fontSize: 10,
+            formatter: (v: number) => {
+              if (prevClose <= 0) return '0.00%';
+              const pct = ((v - prevClose) / prevClose) * 100;
+              return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
+            },
           },
         },
         {
@@ -142,16 +174,22 @@ export function MinuteChart({ quote, minuteData }: StockChartProps) {
             },
           })),
           xAxisIndex: 1,
-          yAxisIndex: 1,
+          yAxisIndex: 2,
         },
       ],
     };
   }, [minuteData, quote]);
 
+  if (loading && !minuteData) {
+    return (
+      <div className="h-64 rounded-lg border border-border/60 bg-dark-bg/30 animate-pulse" />
+    );
+  }
+
   if (!option) {
     return (
-      <div className="flex items-center justify-center h-64 text-text-secondary text-sm">
-        暂无分时数据
+      <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-border text-center text-sm text-text-secondary">
+        暂无分时数据，系统正在等待最新盘口或回退数据源
       </div>
     );
   }

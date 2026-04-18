@@ -121,6 +121,7 @@ export default function HomePage() {
 
   const handleManualRefresh = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['analysis', selectedSymbol] });
+    queryClient.invalidateQueries({ queryKey: ['history', selectedSymbol] });
     queryClient.invalidateQueries({ queryKey: ['market-overview'] });
     toast.success('数据已刷新', { duration: 1500 });
   }, [queryClient, selectedSymbol]);
@@ -136,6 +137,10 @@ export default function HomePage() {
   const analysis = analysisQuery.data;
   const liveQuote = liveQuotes[selectedSymbol];
   const displayQuote = liveQuote ?? analysis?.quote ?? null;
+  const historyErrorMessage =
+    ((historyQuery.error as any)?.response?.data?.detail as string | undefined) ??
+    ((historyQuery.error as any)?.message as string | undefined) ??
+    null;
 
   // Merge live quote into analysis for display
   const displayAnalysis: FullAnalysis | null = analysis
@@ -192,10 +197,10 @@ export default function HomePage() {
                   </button>
                 ))}
                 <div className="ml-auto flex items-center gap-1.5 pb-1">
-                  {analysisQuery.isFetching && (
+                  {(chartMode === 'minute' ? analysisQuery.isFetching : historyQuery.isFetching) && (
                     <span className="text-[10px] text-text-secondary animate-pulse">更新中...</span>
                   )}
-                  {analysis?.quote?.data_status && (
+                  {chartMode === 'minute' && analysis?.quote?.data_status && (
                     <DataStatusBadge status={analysis.quote.data_status} />
                   )}
                 </div>
@@ -205,11 +210,15 @@ export default function HomePage() {
                   <MinuteChart
                     quote={displayQuote}
                     minuteData={analysis?.minute_data ?? null}
+                    loading={analysisQuery.isLoading}
                   />
                 ) : (
                   <CandlestickChart
                     data={historyQuery.data?.data ?? []}
                     showMA
+                    loading={historyQuery.isLoading || historyQuery.isFetching}
+                    errorMessage={historyQuery.isError ? historyErrorMessage : null}
+                    periodLabel={chartMode === 'daily' ? '日K' : '周K'}
                   />
                 )}
               </div>

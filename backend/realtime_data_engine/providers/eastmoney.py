@@ -2,11 +2,8 @@
 Eastmoney (东方财富) real-time data provider.
 Uses public Eastmoney APIs for quotes, capital flow, sector data.
 """
-import asyncio
-import re
 from datetime import datetime
 from typing import Dict, List, Optional
-from urllib.parse import urlencode
 
 import httpx
 from loguru import logger
@@ -25,6 +22,18 @@ EM_FIELDS = (
     "f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f13,f14,f15,f16,f17,f18,"
     "f20,f21,f23,f62,f115,f152"
 )
+
+
+def _split_net_flow(value: float) -> tuple[float, float]:
+    if value >= 0:
+        return value, 0.0
+    return 0.0, abs(value)
+
+
+def _is_regular_trading_minute(value: str) -> bool:
+    if len(value) != 5:
+        return False
+    return ("09:30" <= value <= "11:30") or ("13:00" <= value <= "15:00")
 
 
 def _symbol_to_secid(symbol: str) -> str:
@@ -111,6 +120,7 @@ class EastmoneyProvider(BaseProvider):
                     "Referer": "https://finance.eastmoney.com/",
                 },
                 follow_redirects=True,
+                trust_env=False,
             )
         return self._client
 
@@ -181,7 +191,10 @@ class EastmoneyProvider(BaseProvider):
             for item in trends:
                 parts = item.split(",")
                 if len(parts) >= 7:
-                    times.append(parts[0][-5:])  # HH:MM
+                    minute = parts[0][-5:]
+                    if not _is_regular_trading_minute(minute):
+                        continue
+                    times.append(minute)
                     prices.append(float(parts[2]))
                     volumes.append(float(parts[5]))
                     avg_prices.append(float(parts[7]) if len(parts) > 7 else float(parts[2]))
@@ -207,32 +220,48 @@ class EastmoneyProvider(BaseProvider):
             f"secid={secid}&fields1=f1,f2,f3,f7&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63"
             "&ut=fa5fd1943c7b386f172d6893dbfba10b&lmt=0&klt=1&fqt=1&beg=0&end=20500101"
         )
-        # Use today's aggregated flow endpoint instead
-        url2 = (
-            "https://push2.eastmoney.com/api/qt/stock/fflow/get?"
-            f"secid={secid}&fields=f62,f184,f66,f69,f72,f75,f78,f81,f84,f87,f64,f65,f70,f71,f76,f77,f82,f83"
-            "&ut=fa5fd1943c7b386f172d6893dbfba10b"
-        )
         try:
             client = await self._get_client()
-            resp = await client.get(url2)
+            resp = await client.get(url)
             resp.raise_for_status()
             data = resp.json().get("data", {})
-            if not data:
+            klines = data.get("klines", []) if isinstance(data, dict) else []
+            if not klines:
                 return None
+
+            parts = str(klines[-1]).split(",")
+            if len(parts) < 6:
+                return None
+
+            timestamp_raw = parts[0]
+            try:
+                timestamp = datetime.strptime(timestamp_raw, "%Y-%m-%d %H:%M")
+            except ValueError:
+                timestamp = datetime.now()
+
+            main_net = float(parts[1])
+            small_net = float(parts[2])
+            medium_net = float(parts[3])
+            large_net = float(parts[4])
+            super_large_net = float(parts[5])
+
+            super_large_inflow, super_large_outflow = _split_net_flow(super_large_net)
+            large_inflow, large_outflow = _split_net_flow(large_net)
+            medium_inflow, medium_outflow = _split_net_flow(medium_net)
+            small_inflow, small_outflow = _split_net_flow(small_net)
 
             return CapitalFlowData(
                 symbol=symbol,
-                main_net_inflow=float(data.get("f62", 0) or 0),
-                super_large_inflow=float(data.get("f66", 0) or 0),
-                super_large_outflow=float(data.get("f69", 0) or 0),
-                large_inflow=float(data.get("f72", 0) or 0),
-                large_outflow=float(data.get("f75", 0) or 0),
-                medium_inflow=float(data.get("f78", 0) or 0),
-                medium_outflow=float(data.get("f81", 0) or 0),
-                small_inflow=float(data.get("f84", 0) or 0),
-                small_outflow=float(data.get("f87", 0) or 0),
-                timestamp=datetime.now(),
+                main_net_inflow=main_net,
+                super_large_inflow=super_large_inflow,
+                super_large_outflow=super_large_outflow,
+                large_inflow=large_inflow,
+                large_outflow=large_outflow,
+                medium_inflow=medium_inflow,
+                medium_outflow=medium_outflow,
+                small_inflow=small_inflow,
+                small_outflow=small_outflow,
+                timestamp=timestamp,
                 source="eastmoney",
             )
         except Exception as e:
