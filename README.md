@@ -1,8 +1,21 @@
 # stock_agent_v1
 
-Jade.huang
+## Author
+Jade Huang (GitHub: VickyH-99)
 
 一个 A 股实时分析项目，前端使用 Next.js 14，后端使用 FastAPI，支持个股行情、分时/K 线、资金流、市场概览和 WebSocket 推送。
+
+## Quick Start
+
+### Backend
+cd backend
+pip install -r requirements.txt
+python main.py
+
+### Frontend
+cd frontend
+npm install
+npm run dev
 
 ## 项目结构
 
