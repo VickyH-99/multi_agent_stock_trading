@@ -1,5 +1,7 @@
 # stock_agent_v1
 
+Jade.huang
+
 一个 A 股实时分析项目，前端使用 Next.js 14，后端使用 FastAPI，支持个股行情、分时/K 线、资金流、市场概览和 WebSocket 推送。
 
 ## 项目结构
